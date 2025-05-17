@@ -34,121 +34,53 @@ function drush_provision_civicrm_post_provision_install($url = null) {
   }
 
   _provision_civicrm_install_civicrm($db_user, $db_passwd, $db_host, $db_name, $lang);
-
-  // Fix some paths (not really necessary since 4.x, works fine after install).
-  // _provision_civicrm_fixresourceurls();
-
-  // Clear Config.IDS.ini
-  _provision_civicrm_clear_config_cache();
-
-  // Create a CiviCRM dashboard link in the navigation menu for older core.
-  if (drush_drupal_major_version() <= 7) {
-
-    // Fix the civicrm weight
-    db_query("UPDATE {system} SET weight = 100 WHERE name = 'civicrm'");
-
-    // Update the menu router and cache information first.
-    menu_cache_clear_all();
-
-    // Create a CiviCRM dashboard link in the navigation menu.
-    $options_dashboard = array(
-      'link_title' => 'CiviCRM',
-      'link_path' => 'civicrm/dashboard',
-      'router_path' => 'civicrm/dashboard',
-      'language'  => 'en',
-      'customized' => 1,
-      'options' => array('alter' => TRUE),
-    );
-    menu_link_save($options_dashboard);
-
-    // Update the menu router and cache information again.
-    menu_cache_clear_all();
-
-    drush_log(dt("CiviCRM: dashboard link in the navigation menu added in drush_provision_civicrm_post_provision_install."), 'ok');
-  }
-
   drush_log(dt("CiviCRM: Installation complete!"), 'ok');
 }
 
 /**
  * Main function to initialize the CiviCRM database and settings file.
- * This has been tested on CiviCRM 4.4.
- *
- * This is basically a simplified version of drush_civicrm_install()
- * from civicrm.drush.inc shipped with CiviCRM.
- *
- * We had to fork it since it assumes that the civicrmInstallerHelper
- * is located in sites/example.org/modules/civicrm/.
- *
- * Also removed the references to the tar file, since we assume that
- * the platform is already created with drush make.
+ * It used to do more things, but most of it was removed when we switched
+ * to just calling a drush command, depending on the Drupal version.
  */
 function _provision_civicrm_install_civicrm($dbuser, $dbpass, $dbhost, $dbname, $lang) {
   // As of D8, the database schema and civicrm.settings.php
   // are generated when the module is first installed.
-  if (drush_drupal_major_version() >= 8) {
-    // SystemInstallEvent will be called from here with the first call of CRM_Core_Config,
-    // which calls Core_BAO_ConfigSetting::applyLocale(), who will default to calling
-    // Civi::settings()->get('lcMessages');
-    // Therefore, we need to pass the seedLanguage before that.
-    if ($lang) {
-      global $civicrm_setting;
-      $civicrm_setting['domain']['lcMessages'] = $lang;
+  $drupal_core_version = drush_drupal_major_version();
+
+  // Transition code, provision might not have this function
+  if (function_exists('provision_get_drupal_core_version')) {
+    $v = provision_get_drupal_core_version();
+    if ($v) {
+      $drupal_core_version = $v;
     }
-
-    drush_log(dt("CiviCRM: Enabling the CiviCRM module."), 'ok');
-    try {
-      \Drupal::service('module_installer')->install(['civicrm']);
-    }
-    catch (Exception $e) {
-      // Do whatever is necessary to help debug installation problems
-      drush_log(dt("CiviCRM: failed to enable CiviCRM: !error - !trace", ['!error' => $e->getMessage(), '!trace' => print_r($e->getTrace(), 1)]), 'error');
-    }
-    return;
   }
 
-  // Various civicrm.drush.inc functions expect the $crmPath to be set.
-  global $crmPath;
-  $crmPath = _provision_civicrm_get_package_path();
-  $loadGeneratedData = drush_get_option('load_generated_data', FALSE);
+  // Install CiviCRM using cv and then enable the module
+  // @todo FIXME On Drupal10, test if we can use cv core:install as well (so that we can support the $lang)
+  drush_log(dt('CiviCRM: Detected Drupal core version: %version', ['%version' => $drupal_core_version]), 'ok');
+  $protocol = (d()->ssl_enabled || d()->https_enabled) ? 'https' : 'http';
+  $baseUrl = $protocol . '://' . d()->uri . '/';
+  $command = 'cv core:install --cms-base-url=' . $baseUrl . ' --lang=' . escapeshellarg($lang) . ' && drush pm-enable civicrm -y';
 
-  drush_log('DRUSH_DRUPAL_ROOT: ' . drush_get_context('DRUSH_DRUPAL_ROOT'), 'ok');
-  drush_log('DRUSH_SITE_ROOT: ' . drush_get_context('DRUSH_DRUPAL_SITE_ROOT', FALSE), 'ok');
-
-  // Include civicrm installer helper file
-  $civicrmInstallerHelper = $crmPath . "/install/civicrm.php";
-
-  if (!file_exists($civicrmInstallerHelper)) {
-    return drush_set_error('CIVICRM_NOT_PRESENT', dt("CiviCRM installer helper file is missing."));
+  if (version_compare($drupal_core_version, 10, '>=')) {
+    $command = 'drush pm:install civicrm -y';
   }
 
-  // NB: civicrm drush functions expect the parent dir of the civicrm code base.
-  $modPath = $crmPath . '/../';
+  drush_log(dt("CiviCRM: running: %command", ['%command' => $command]), 'ok');
+  provision_file()->chmod(d()->site_path, 0755);
+  $output = system($command, $retval);
+  drush_log(dt("CiviCRM: retval=%retval, output: %output", ['%retval' => $retval, '%output' => $output]), $retval == 0 ? 'ok' : 'error');
+  provision_file()->chmod(d()->site_path, 0555);
 
-  // Setup all required files/civicrm/* directories
-  if (!_civicrm_create_files_dirs($civicrmInstallerHelper, $modPath)) {
-    return FALSE;
-  }
-
-  // Install the database
-  drush_log(dt("CiviCRM: Initializing the CiviCRM database."));
-  _civicrm_install_db($dbuser, $dbpass, $dbhost, $dbname, $modPath, $lang, $loadGeneratedData);
-
-  // Generate civicrm.settings.php file
-  drush_log(dt("CiviCRM: Generating the CiviCRM settings file."));
-  _civicrm_generate_settings_file($dbuser, $dbpass, $dbhost, $dbname, $modPath);
-
-  // SystemInstallEvent will be called from here with the first call of CRM_Core_Config,
-  // which calls Core_BAO_ConfigSetting::applyLocale(), who will default to calling
-  // Civi::settings()->get('lcMessages');
-  // Therefore, we need to pass the seedLanguage before that.
-  if ($lang) {
-    global $civicrm_setting;
-    $civicrm_setting['domain']['lcMessages'] = $lang;
-  }
-
-  drush_log(dt("CiviCRM: Enabling the CiviCRM module."), 'ok');
-  _provision_civicrm_run_drush_command('en civicrm -y');
+  // Fix file permissions so that www-data can write
+  drush_log(dt("CiviCRM: running fix-drupal-site-ownership.sh and permissions..."), 'ok');
+  drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-site-ownership.sh --site-path=%s --script-user=%s --web-group=%s", d()->site_path, d()->server->script_user, d()->server->web_group);
+  $output = implode('', drush_shell_exec_output());
+  drush_log(dt("CiviCRM: fix-drupal-site-ownership.sh output: %output", ['%output' => $output]), 'ok');
+  drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-site-permissions.sh --site-path=%s", d()->site_path);
+  $output = implode('', drush_shell_exec_output());
+  drush_log(dt("CiviCRM: fix-drupal-site-permissions.sh output: %output", ['%output' => $output]), 'ok');
+  drush_log(dt("CiviCRM: finished running fix-drupal-site-ownership.sh and permissions"), 'ok');
 }
 
 /**
