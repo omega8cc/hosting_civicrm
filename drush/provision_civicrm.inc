@@ -214,7 +214,7 @@ function _provision_civicrm_regenerate_settings($url = NULL) {
     // This is not great because we assume [civicrm.private] points here
     // but .. it should?
     $replacements[] = [
-      'search_regex' => "#'CIVICRM_TEMPLATE_COMPILEDIR', '/var/aegir/platforms/[^/]+/(web/)?sites/[^/]+/(private/)?files/civicrm/templates_c'#",
+      'search_regex' => "#'CIVICRM_TEMPLATE_COMPILEDIR', '(.*?/)[^/]+/(web/)?sites/[^/]+/(private/)?files/civicrm/templates_c'#",
       'replace_line' => "'CIVICRM_TEMPLATE_COMPILEDIR', '" . d()->site_path . "/private/files/civicrm/templates_c'",
     ];
 

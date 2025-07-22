@@ -16,8 +16,8 @@
  */
 function drush_provision_civicrm_pre_provision_deploy($url = NULL) {
   if (_provision_civicrm_is_site_context()) {
-    $webRoot = _provision_civicrm_find_platform_web_root(d()->root);
-    drush_set_option('civicrm_old_path', $webRoot);
+    $drupalRoot = drush_get_context('DRUSH_DRUPAL_ROOT');
+    drush_set_option('civicrm_old_path', $drupalRoot);
 
     $baseUrl = 'http://' . drush_get_option('uri', false);
     drush_set_option('civicrm_old_baseurl', $baseUrl);
