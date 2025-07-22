@@ -18,6 +18,38 @@ function findDrupalAppRoot($startDir) {
 }
 
 /**
+ * Platform web root auto-discovery to avoid confusing
+ * typical Drupal 8+ app root with Drupal 8+ web root.
+ */
+function _provision_civicrm_find_platform_web_root($isroot) {
+
+  $test_root_index = $isroot . '/index.php';
+  $test_root_docroot = $isroot . '/docroot/index.php';
+  $test_root_html = $isroot . '/html/index.php';
+  $test_root_web = $isroot . '/web/index.php';
+
+  if (!provision_file()->exists($test_root_index)->status()) {
+    drush_log(dt("Platform web root path needs correction, running auto-discovery.."), 'notice');
+    if (provision_file()->exists($test_root_docroot)->status()) {
+      $isroot = $isroot . '/docroot';
+      drush_log(dt("Platform corrected web root: @webroot", array('@webroot' => $isroot)), 'debug');
+    }
+    elseif (provision_file()->exists($test_root_html)->status()) {
+      $isroot = $isroot . '/html';
+      drush_log(dt("Platform corrected web root: @webroot", array('@webroot' => $isroot)), 'debug');
+    }
+    elseif (provision_file()->exists($test_root_web)->status()) {
+      $isroot = $isroot . '/web';
+      drush_log(dt("Platform corrected web root: @webroot", array('@webroot' => $isroot)), 'debug');
+    }
+  }
+  else {
+    drush_log(dt("Platform web root: @webroot", array('@webroot' => $isroot)), 'debug');
+  }
+  return $isroot;
+}
+
+/**
  * Expose the service type this extension defines to provision.
  *
  * @return
