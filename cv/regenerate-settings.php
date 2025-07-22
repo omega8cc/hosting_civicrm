@@ -8,7 +8,7 @@
 // It might fix some settings, but the main objective is to regenerate the settings
 // file using the latest CiviCRM settings template.
 
-$host = $argv[1] ?? CIVICRM_UF_BASEURL;
+$host = !empty($argv[1]) ? $argv[1] : CIVICRM_UF_BASEURL;
 $regen_keys = !empty($argv[1]);
 
 function is_constant($token) {
