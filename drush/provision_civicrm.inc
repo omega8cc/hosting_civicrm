@@ -7,6 +7,17 @@
  */
 
 /**
+ * Custom helper function findDrupalAppRoot
+ */
+function findDrupalAppRoot($startDir) {
+  $dir = realpath($startDir);
+  while ($dir !== '/' && !is_dir($dir . '/vendor')) {
+    $dir = dirname($dir);
+  }
+  return is_dir($dir . '/vendor') ? $dir : null;
+}
+
+/**
  * Expose the service type this extension defines to provision.
  *
  * @return
