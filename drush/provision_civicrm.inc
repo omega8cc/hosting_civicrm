@@ -108,14 +108,6 @@ function _provision_civicrm_is_site_context($load_if_missing = FALSE) {
 function _provision_civicrm_get_package_path($load_if_missing = FALSE) {
   // Issue#2942572 For D8 and D9, we only support having CiviCRM in /vendor
   // Aegir package info functions are not CiviCRM-friendly. This is simpler.
-  $drupal_core_version = drush_drupal_major_version();
-
-  if (function_exists('provision_get_drupal_core_version')) {
-    if ($v = provision_get_drupal_core_version()) {
-      $drupal_core_version = $v;
-    }
-  }
-
   if (version_compare($drupal_core_version, 8, '>=')) {
     $root = d()->root;
     // If Drupal lives under a 'web' subdirectory (which is usually the case with composer),

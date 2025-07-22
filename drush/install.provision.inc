@@ -45,19 +45,10 @@ function drush_provision_civicrm_post_provision_install($url = null) {
 function _provision_civicrm_install_civicrm($dbuser, $dbpass, $dbhost, $dbname, $lang) {
   // As of D8, the database schema and civicrm.settings.php
   // are generated when the module is first installed.
-  $drupal_core_version = drush_drupal_major_version();
-
-  // Transition code, provision might not have this function
-  if (function_exists('provision_get_drupal_core_version')) {
-    $v = provision_get_drupal_core_version();
-    if ($v) {
-      $drupal_core_version = $v;
-    }
-  }
 
   // Install CiviCRM using cv and then enable the module
   // @todo FIXME On Drupal10, test if we can use cv core:install as well (so that we can support the $lang)
-  drush_log(dt('CiviCRM: Detected Drupal core version: %version', ['%version' => $drupal_core_version]), 'ok');
+  drush_log(dt('CiviCRM: Detected Drupal core version: %version', ['%version' => drush_drupal_major_version()]), 'ok');
   $protocol = (d()->ssl_enabled || d()->https_enabled) ? 'https' : 'http';
   $baseUrl = $protocol . '://' . d()->uri . '/';
   $command = 'cv core:install --cms-base-url=' . $baseUrl . ' --lang=' . escapeshellarg($lang) . ' && drush pm-enable civicrm -y';
