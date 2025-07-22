@@ -53,14 +53,63 @@ function _provision_civicrm_install_civicrm($dbuser, $dbpass, $dbhost, $dbname, 
   $baseUrl = $protocol . '://' . d()->uri . '/';
   $command = 'cv core:install --cms-base-url=' . $baseUrl . ' --lang=' . escapeshellarg($lang) . ' && drush pm-enable civicrm -y';
 
-  if (version_compare($drupal_core_version, 10, '>=')) {
-    $command = 'drush pm:install civicrm -y';
+  if (drush_drupal_major_version() >= 10) {
+
+    // Find The App Root Directory
+    $appRoot = findDrupalAppRoot(d()->root);
+
+    // Define Local Drush Path
+    $drushPath = 'vendor/drush/drush/drush.php';
+
+    // Unlock Site-Local Drush
+    provision_check_codebase_status();
+    if (d()->isConsolePatched || d()->isCorePatched) {
+      drush_log(dt('CRM/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
+      provision_unlock_drush_local_vnd();
+    }
+
+    // Check If The Local Drush Exists And Is Executable
+    $drushAbsolutePath = $appRoot . '/' . $drushPath;
+    drush_log(dt('CRM/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
+
+    if (is_executable($drushAbsolutePath)) {
+      $cmd_string = $drushPath . ' pm:install civicrm -y';
+    }
+    else {
+      $cmd_string = 'drush10 pm:install civicrm -y';
+    }
+
+    // Make site_path writable
+    provision_file()->chmod(d()->site_path, 0755);
+
+    drush_log(dt("CiviCRM: running: %command", ['%command' => $cmd_string]), 'ok');
+
+    $result = drush_shell_cd_and_exec($appRoot, $cmd_string);
+    $output = drush_shell_exec_output();
+    foreach ($output as $index => $line) {
+      if (!$success) { // Log the entire error as a notice.
+        $line_status = 'notice';
+      }
+      else { // Only log the last line as success.
+        $line_status = $index+1 == count($output) ? 'success' : 'notice';
+      }
+      drush_log($line, $line_status);
+    }
+
+    // Lock Site-Local Drush if Unlocked
+    provision_check_codebase_status();
+    if (!d()->isConsolePatched || !d()->isCorePatched) {
+      drush_log(dt('CRM/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+      provision_lock_drush_local_vnd();
+    }
+  }
+  else {
+    drush_log(dt("CiviCRM: running: %command", ['%command' => $command]), 'ok');
+    provision_file()->chmod(d()->site_path, 0755);
+    $output = system($command, $retval);
+    drush_log(dt("CiviCRM: retval=%retval, output: %output", ['%retval' => $retval, '%output' => $output]), $retval == 0 ? 'ok' : 'error');
   }
 
-  drush_log(dt("CiviCRM: running: %command", ['%command' => $command]), 'ok');
-  provision_file()->chmod(d()->site_path, 0755);
-  $output = system($command, $retval);
-  drush_log(dt("CiviCRM: retval=%retval, output: %output", ['%retval' => $retval, '%output' => $output]), $retval == 0 ? 'ok' : 'error');
   provision_file()->chmod(d()->site_path, 0555);
 
   // Fix file permissions so that www-data can write
