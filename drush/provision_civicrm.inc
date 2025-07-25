@@ -7,9 +7,9 @@
  */
 
 /**
- * Custom helper function findDrupalAppRoot
+ * Custom helper function findDruAppRoot
  */
-function findDrupalAppRoot($startDir) {
+function findDruAppRoot($startDir) {
   $dir = realpath($startDir);
   while ($dir !== '/' && !is_dir($dir . '/vendor')) {
     $dir = dirname($dir);
@@ -153,7 +153,7 @@ function _provision_civicrm_get_package_path($load_if_missing = FALSE) {
   // Aegir package info functions are not CiviCRM-friendly. This is simpler.
 
   if (drush_drupal_major_version() >= 8) {
-    $appRoot = findDrupalAppRoot(d()->root);
+    $appRoot = findDruAppRoot(d()->root);
     $crmpath = $appRoot . '/vendor/civicrm/civicrm-core/';
     if (is_dir($crmpath)) {
       drush_log(dt('CiviCRM: civicrm is in @path', array('@path' => $crmpath)));

@@ -56,7 +56,7 @@ function _provision_civicrm_install_civicrm($dbuser, $dbpass, $dbhost, $dbname, 
   if (drush_drupal_major_version() >= 10) {
 
     // Find The App Root Directory
-    $appRoot = findDrupalAppRoot(d()->root);
+    $appRoot = findDruAppRoot(d()->root);
 
     // Define Local Drush Path
     $drushPath = 'vendor/drush/drush/drush.php';
