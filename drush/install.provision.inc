@@ -51,7 +51,12 @@ function _provision_civicrm_install_civicrm($dbuser, $dbpass, $dbhost, $dbname, 
   drush_log(dt('CiviCRM: Detected Drupal core version: %version', ['%version' => drush_drupal_major_version()]), 'ok');
   $protocol = (d()->ssl_enabled || d()->https_enabled) ? 'https' : 'http';
   $baseUrl = $protocol . '://' . d()->uri . '/';
-  $command = 'cv core:install --cms-base-url=' . $baseUrl . ' --lang=' . escapeshellarg($lang) . ' && drush pm-enable civicrm -y';
+  // SECURITY: d()->uri derives from the site alias and is not validated
+  // against shell-unsafe characters at the Hostmaster UI layer. $baseUrl
+  // is used in $command below which is passed to system() (Drupal < 10
+  // branch). Escape it; $lang is already escaped.
+  // See DECISIONS.md Decision 002.
+  $command = 'cv core:install --cms-base-url=' . escapeshellarg($baseUrl) . ' --lang=' . escapeshellarg($lang) . ' && drush pm-enable civicrm -y';
 
   if (drush_drupal_major_version() >= 10) {
 
