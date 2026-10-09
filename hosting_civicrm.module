@@ -40,6 +40,14 @@ function hosting_civicrm_node_load($nodes, $types) {
     return;
   }
 
+  // No CiviCRM package on this instance: nothing to look up for any site.
+  // This hook runs for every site node load, on every page that lists
+  // sites, so it must cost nothing where CiviCRM is absent.
+  $package_id = _hosting_civicrm_package_id();
+  if (!$package_id) {
+    return;
+  }
+
   foreach ($nodes as $node) {
     if ($node->type != 'site') {
       continue;
@@ -50,20 +58,35 @@ function hosting_civicrm_node_load($nodes, $types) {
     // The presence of the version is also a check used later to know
     // if a site has CiviCRM installed (ex: whether to show the sitekey).
     $query = 'SELECT version as civicrm_version
-                FROM hosting_package_instance hpi
-                LEFT JOIN hosting_package pkg ON (pkg.nid = hpi.package_id)
+                FROM {hosting_package_instance}
                WHERE platform = :platform
-                 and short_name = :short_name
-                 and status = 1
+                 AND status = 1
+                 AND package_id = :package_id
                ORDER BY iid DESC';
 
-    if ($result = db_query($query, array(':platform' => $node->platform, ':short_name' => 'civicrm'))->fetchField()) {
+    if ($result = db_query($query, array(':platform' => $node->platform, ':package_id' => $package_id))->fetchField()) {
       $node->civicrm_version = $result;
 
       // Get the CiviCRM site key
       $node->civicrm_sitekey = db_query('SELECT civicrm_sitekey FROM hosting_site WHERE nid = :nid', array(':nid' => $node->nid))->fetchField();
     }
   }
+}
+
+/**
+ * The CiviCRM package's node id, looked up once per request.
+ *
+ * @return int|false
+ *   The package nid, or FALSE when no CiviCRM package is registered on this
+ *   instance.
+ */
+function _hosting_civicrm_package_id() {
+  static $package_id = NULL;
+  if ($package_id === NULL) {
+    $nid = db_query('SELECT nid FROM {hosting_package} WHERE short_name = :short_name', array(':short_name' => 'civicrm'))->fetchField();
+    $package_id = $nid ? (int) $nid : FALSE;
+  }
+  return $package_id;
 }
 
 function hosting_civicrm_node_view($node, $view_mode, $langcode) {
@@ -131,8 +154,19 @@ function hosting_civicrm_site_count() {
  * Return an array of active platforms that contain CiviCRM.
  */
 function hosting_civicrm_get_platforms() {
+  // Called for every site node load by the cron module and by the queue
+  // count on every dispatch: once per request is enough.
+  $platforms = &drupal_static(__FUNCTION__);
+  if ($platforms !== NULL) {
+    return $platforms;
+  }
+  $platforms = array();
+
   // Find the package ID for CiviCRM, which is unique accros all platforms.
-  $package_id = db_query('SELECT nid FROM {hosting_package} WHERE short_name = :short_name', array(':short_name' => 'civicrm'))->fetchField();
+  $package_id = _hosting_civicrm_package_id();
+  if (!$package_id) {
+    return $platforms;
+  }
 
   // Find active platforms that have the package_id.
   $result = db_query('SELECT DISTINCT nid FROM {hosting_platform} pl
@@ -142,8 +176,6 @@ function hosting_civicrm_get_platforms() {
     ':package_id' => $package_id,
     ':status' => HOSTING_PLATFORM_ENABLED,
   ));
-
-  $platforms = array();
 
   foreach ($result as $record) {
     $platforms[] = $record->nid;
