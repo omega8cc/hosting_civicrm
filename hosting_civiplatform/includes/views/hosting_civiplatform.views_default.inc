@@ -13,7 +13,7 @@ function hosting_civiplatform_views_default_views() {
   // Exported view: hosting_civiplatform_list
   $view = new view();
   $view->name = 'hosting_civiplatform_list';
-  $view->description = 'Display a list of CiviCRM platforms in Aegir.';
+  $view->description = 'Display a list of CiviCRM platforms in Ægir.';
   $view->tag = 'hosting_civiplatform';
   $view->base_table = 'node';
   $view->human_name = 'Hosting CiviCRM Platform List';

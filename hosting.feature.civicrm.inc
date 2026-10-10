@@ -10,7 +10,7 @@
 function hosting_civicrm_hosting_feature() {
   $features['civicrm'] = array(
     'title' => t('CiviCRM'),
-    'description' => t('Enables installation and maintenance of CiviCRM on Aegir-managed sites.'),
+    'description' => t('Enables installation and maintenance of CiviCRM on Ægir-managed sites.'),
     'status' => HOSTING_FEATURE_DISABLED,
     'module' => 'hosting_civicrm',
     'group' => 'experimental'

@@ -13,7 +13,7 @@ function hosting_civisite_views_default_views() {
   // Exported view: hosting_civisite_list
   $view = new view();
   $view->name = 'hosting_civisite_list';
-  $view->description = 'Display a list of CiviCRM sites hosted in Aegir.';
+  $view->description = 'Display a list of CiviCRM sites hosted in Ægir.';
   $view->tag = 'hosting_civisite';
   $view->base_table = 'node';
   $view->human_name = 'Hosting CiviCRM Site List';

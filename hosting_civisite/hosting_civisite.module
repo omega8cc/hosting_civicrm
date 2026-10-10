@@ -308,7 +308,7 @@ function hosting_civisite_hosting_tasks() {
 
   $tasks['civisite']['civicrm-import'] = array(
     'title' => t('Import'),
-    'description' => t('Import an existing site into Aegir'),
+    'description' => t('Import an existing site into Ægir'),
     'hidden' => TRUE,
     'provision_save' => TRUE,
     'access callback' => 'hosting_civisite_task_menu_access',
