@@ -128,7 +128,9 @@ function _provision_civicrm_install_civicrm($dbuser, $dbpass, $dbhost, $dbname, 
     drush_log(dt("CiviCRM: retval=%retval, output: %output", ['%retval' => $retval, '%output' => $output]), $retval == 0 ? 'ok' : 'error');
   }
 
-  provision_file()->chmod(d()->site_path, 0555);
+  // The site folder stays at Provision's 0755: the task saves drushrc.php in
+  // it once this hook returns, and the chained Verify writes settings.php
+  // there first, which a closed folder refuses.
 
   // Fix file permissions so that www-data can write
   drush_log(dt("CiviCRM: running fix-drupal-site-ownership.sh and permissions..."), 'ok');

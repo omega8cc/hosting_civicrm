@@ -328,11 +328,11 @@ function _provision_civicrm_regenerate_settings($url = NULL) {
   // @todo FIXME pass the civicrm_sitekey if set in the frontend
   _provision_civicrm_run_cv_command('php:script ' . dirname(__DIR__) . '/cv/regenerate-settings.php ' . escapeshellarg($url));
 
-  // Set permissions back to strict
+  // Set the file back to strict. The site folder stays at Provision's 0755:
+  // later steps of the same task write and remove files in it (the database
+  // dump a deploy imported, the drushrc.php the task saves), which a closed
+  // folder refuses, failing a Restore, Clone or Migrate.
   provision_file()->chmod($filename, 0440)
-    ->succeed($name . ' permissions of @path have been changed to @perm.')
-    ->fail('Could not change permissions <code>@path</code> to @perm');
-  provision_file()->chmod(d()->site_path, 0555)
     ->succeed($name . ' permissions of @path have been changed to @perm.')
     ->fail('Could not change permissions <code>@path</code> to @perm');
 
