@@ -171,13 +171,13 @@ function _provision_civicrm_cv_prefix() {
 }
 
 /**
- * Keep a new Backdrop site's CiviCRM private files in the site's private folder.
+ * Keep a Backdrop site's CiviCRM private files in the site's private folder.
  *
- * CiviCRM's Backdrop installer, run from the command line, does not see the
- * site's private file path and pins CiviCRM's private area (its logs and
- * compiled templates) to the public files folder; on Drupal it lands in the
- * private one. Run right after the install, before anything lives there; the
- * settings regeneration that follows keeps the pin.
+ * CiviCRM's settings generator, run from the command line, does not see a
+ * Backdrop site's private file path and pins CiviCRM's private area (its logs
+ * and compiled templates) to the public files folder, on install and on every
+ * regeneration; on Drupal it lands in the private one. Run after each of them,
+ * so the file is the same from one regeneration to the next.
  */
 function _provision_civicrm_backdrop_private_path() {
   $filename = d()->site_path . '/civicrm.settings.php';
@@ -382,6 +382,10 @@ function _provision_civicrm_regenerate_settings($url = NULL) {
 
   // @todo FIXME pass the civicrm_sitekey if set in the frontend
   _provision_civicrm_run_cv_command('php:script ' . dirname(__DIR__) . '/cv/regenerate-settings.php ' . escapeshellarg($url));
+
+  if (_provision_civicrm_is_backdrop()) {
+    _provision_civicrm_backdrop_private_path();
+  }
 
   // Set the file back to strict. The site folder stays at Provision's 0755:
   // later steps of the same task write and remove files in it (the database
