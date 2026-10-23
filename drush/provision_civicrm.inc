@@ -318,8 +318,13 @@ function _provision_civicrm_get_package_info() {
 
 /**
  * CiviCRM verify operations (used by both verify and deploy)
+ *
+ * $url becomes the base URL in civicrm.settings.php (without it the file's own
+ * is kept); $new_keys gives the site a new site key, credential keys, signing
+ * keys and deploy id, for a site that is new (a Clone). Without it the existing
+ * keys are kept and only missing ones are generated.
  */
-function _provision_civicrm_regenerate_settings($url = NULL) {
+function _provision_civicrm_regenerate_settings($url = NULL, $new_keys = FALSE) {
   drush_log(dt("CiviCRM: starting provision_civicrm_regenerate_settings()."));
 
   // We have to manually update the $civicrm_root in the civicrm.settings.php
@@ -387,7 +392,7 @@ function _provision_civicrm_regenerate_settings($url = NULL) {
   }
 
   // @todo FIXME pass the civicrm_sitekey if set in the frontend
-  _provision_civicrm_run_cv_command('php:script ' . dirname(__DIR__) . '/cv/regenerate-settings.php ' . escapeshellarg($url));
+  _provision_civicrm_run_cv_command('php:script ' . dirname(__DIR__) . '/cv/regenerate-settings.php ' . escapeshellarg($url) . ($new_keys ? ' new-keys' : ''));
 
   if (_provision_civicrm_is_backdrop()) {
     _provision_civicrm_backdrop_private_path();

@@ -1,15 +1,16 @@
 <?php
 
-// This should be invoked with: cv php:script cv/regenerate-settings.php [host]
-// if a [host] is passed, then the site key and creds are rotated (ex: for site cloning)
-// host format must include https://
+// This should be invoked with: cv php:script cv/regenerate-settings.php [host] [new-keys]
+// A [host] (format must include https://) becomes the base URL; without it the file's
+// own is kept. With new-keys the site key and creds are rotated (a Clone, a new site);
+// otherwise the existing ones are kept and only missing ones are generated.
 //
 // This script assumes that you have a somewhat working CiviCRM installation
 // It might fix some settings, but the main objective is to regenerate the settings
 // file using the latest CiviCRM settings template.
 
 $host = !empty($argv[1]) ? $argv[1] : CIVICRM_UF_BASEURL;
-$regen_keys = !empty($argv[1]);
+$regen_keys = isset($argv[2]) && $argv[2] === 'new-keys';
 
 function is_constant($token) {
   return $token == T_CONSTANT_ENCAPSED_STRING || $token == T_STRING ||
@@ -102,57 +103,68 @@ if (file_exists($model->settingsPath)) {
     }
   }
 
-  // Define imported values
+  // Define imported values: a key the file lacks (written before CiviCRM had
+  // it) or left as a template placeholder counts as missing, and is generated
+  // below.
+  $imported = function ($names) use ($defines) {
+    foreach ($names as $name) {
+      if (isset($defines[$name]) && $defines[$name] !== '' && strpos($defines[$name], '%%') !== 0) {
+        return $defines[$name];
+      }
+    }
+    return '';
+  };
   if (!$regen_keys) {
-    $model->credKeys = [$defines['_CIVICRM_CRED_KEYS'] ?? $defines['CIVICRM_CRED_KEYS']];
-    $model->deployID = $defines['_CIVICRM_DEPLOY_ID'] ?? $defines['CIVICRM_DEPLOY_ID'];
-    $model->siteKey = $defines['CIVICRM_SITE_KEY'];
-    $model->signKeys = [$defines['_CIVICRM_SIGN_KEYS'] ?? $defines['CIVICRM_SIGN_KEYS']];
+    $credKeys = $imported(['_CIVICRM_CRED_KEYS', 'CIVICRM_CRED_KEYS']);
+    $signKeys = $imported(['_CIVICRM_SIGN_KEYS', 'CIVICRM_SIGN_KEYS']);
+    $model->credKeys = $credKeys !== '' ? [$credKeys] : [];
+    $model->deployID = $imported(['_CIVICRM_DEPLOY_ID', 'CIVICRM_DEPLOY_ID']);
+    $model->siteKey = $imported(['CIVICRM_SITE_KEY']);
+    $model->signKeys = $signKeys !== '' ? [$signKeys] : [];
   }
   $model->cms = $defines['CIVICRM_UF'];
   $model->cmsBaseUrl = $host;
   $model->templateCompilePath = \Civi::paths()->getPath('[civicrm.private]/templates_c');
 }
 
-// Setup CiviCRM settings if not set
-if ($regen_keys) {
-  // Generate all the relevant variables
-  $toAlphanum = function($bits) {
-    return preg_replace(';[^a-zA-Z0-9];', '', base64_encode($bits));
-  };
+// Setup CiviCRM settings if not set: every key with new keys, the missing
+// ones otherwise
+// Generate all the relevant variables
+$toAlphanum = function($bits) {
+  return preg_replace(';[^a-zA-Z0-9];', '', base64_encode($bits));
+};
 
-  // Setup Cred Keys
-  if (empty($model->credKeys)) {
-    $model->credKeys = ['aes-cbc:hkdf-sha256:' . $toAlphanum(random_bytes(37))];
-  }
-  if (is_string($model->credKeys)) {
-    $model->credKeys = [$model->credKeys];
-  }
-  // Setup Deploy Key
-  if (empty($model->deployID)) {
-    $model->deployID = $toAlphanum(random_bytes(10));
-  }
-  // Setup Site Key
-  if (!empty($model->siteKey)) {
-      // skip
-  }
-  elseif (function_exists('random_bytes')) {
-    $model->siteKey = $toAlphanum(random_bytes(32));
-  }
-  elseif (function_exists('openssl_random_pseudo_bytes')) {
-    $model->siteKey = $toAlphanum(openssl_random_pseudo_bytes(32));
-  }
-  else {
-    throw new \RuntimeException("Failed to generate a random site key");
-  }
-  //Setup Sign Key
-  if (empty($model->signKeys)) {
-    $model->signKeys = ['jwt-hs256:hkdf-sha256:' . $toAlphanum(random_bytes(40))];
-    // toAlpanum() occasionally loses a few bits of entropy, but random_bytes() has significant excess, so it's still more than ample for 256 bit hkdf.
-  }
-  if (is_string($model->signKeys)) {
-    $model->signKeys = [$model->signKeys];
-  }
+// Setup Cred Keys
+if (empty($model->credKeys)) {
+  $model->credKeys = ['aes-cbc:hkdf-sha256:' . $toAlphanum(random_bytes(37))];
+}
+if (is_string($model->credKeys)) {
+  $model->credKeys = [$model->credKeys];
+}
+// Setup Deploy Key
+if (empty($model->deployID)) {
+  $model->deployID = $toAlphanum(random_bytes(10));
+}
+// Setup Site Key
+if (!empty($model->siteKey)) {
+    // skip
+}
+elseif (function_exists('random_bytes')) {
+  $model->siteKey = $toAlphanum(random_bytes(32));
+}
+elseif (function_exists('openssl_random_pseudo_bytes')) {
+  $model->siteKey = $toAlphanum(openssl_random_pseudo_bytes(32));
+}
+else {
+  throw new \RuntimeException("Failed to generate a random site key");
+}
+//Setup Sign Key
+if (empty($model->signKeys)) {
+  $model->signKeys = ['jwt-hs256:hkdf-sha256:' . $toAlphanum(random_bytes(40))];
+  // toAlpanum() occasionally loses a few bits of entropy, but random_bytes() has significant excess, so it's still more than ample for 256 bit hkdf.
+}
+if (is_string($model->signKeys)) {
+  $model->signKeys = [$model->signKeys];
 }
 
 // Build params

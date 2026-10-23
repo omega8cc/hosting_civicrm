@@ -58,6 +58,18 @@ function provision_civicrm_provision_register_autoload() {
 }
 
 /**
+ * Implements hook_provision_deploy_options_alter().
+ *
+ * A Clone is a new site and gets CiviCRM keys of its own; every other deploy
+ * (Restore, Migrate, the Backdrop upgrades) carries the same site on.
+ */
+function provision_civicrm_provision_deploy_options_alter(&$deploy_options, $context) {
+  if ($context == 'clone') {
+    $deploy_options['civicrm_new_keys'] = 1;
+  }
+}
+
+/**
  * Implementation of hook_drush_command().
  */
 function provision_civicrm_drush_command() {
