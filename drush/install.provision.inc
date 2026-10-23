@@ -58,7 +58,20 @@ function _provision_civicrm_install_civicrm($dbuser, $dbpass, $dbhost, $dbname, 
   // See DECISIONS.md Decision 002.
   $command = 'cv core:install --cms-base-url=' . escapeshellarg($baseUrl) . ' --lang=' . escapeshellarg($lang) . ' && drush pm-enable civicrm -y';
 
-  if (drush_drupal_major_version() >= 10) {
+  if (_provision_civicrm_is_backdrop()) {
+    // CiviCRM's Backdrop installer writes civicrm.settings.php into the site
+    // folder and enables the module itself: no Drush step follows. cv is given
+    // the site's URL, which core:install also takes as the CMS base URL.
+    $install = 'core:install';
+    if ($lang) {
+      $install .= ' --lang=' . escapeshellarg($lang);
+    }
+    provision_file()->chmod(d()->site_path, 0755);
+    $retval = 0;
+    _provision_civicrm_run_cv_command($install, $retval);
+    drush_log(dt("CiviCRM: core:install retval=%retval", array('%retval' => $retval)), $retval == 0 ? 'ok' : 'error');
+  }
+  elseif (drush_drupal_major_version() >= 10) {
 
     // Find The App Root Directory
     $appRoot = findDruAppRoot(d()->root);

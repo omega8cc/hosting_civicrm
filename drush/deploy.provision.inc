@@ -48,6 +48,20 @@ function drush_provision_civicrm_post_provision_deploy() {
     return;
   }
 
+  if (_provision_civicrm_is_backdrop()) {
+    // The Backdrop layer never fully bootstraps a site in this process: the
+    // URL rewrite runs inside cv, which boots the deployed site, and Backdrop
+    // has no class loader variable to drop.
+    $old_url = drush_get_option('old_uri');
+    $new_url = drush_get_option('uri');
+    if ($old_url && $new_url && $old_url != $new_url) {
+      $script = dirname(__DIR__) . '/cv/mosaico-urls.php';
+      _provision_civicrm_run_cv_command('php:script ' . escapeshellarg($script) . ' ' . escapeshellarg($old_url) . ' ' . escapeshellarg($new_url));
+    }
+    drush_log(dt("CiviCRM: Finished drush_civicrm_post_provision_deploy"));
+    return;
+  }
+
   // Do not check blocked_ips, otherwise it will crash when doing an
   // upgrade from drupal6 to drupal7. We need to bootstrap in order to
   // delete the civicrm_class_loader variable.

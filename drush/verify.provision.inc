@@ -38,7 +38,8 @@ function drush_provision_civicrm_provision_verify($url = NULL) {
   // Precaution to avoid "duplicate entry" that sometimes happens
   // Set to NULL instead of delete, because sometimes the quick write/read might
   // cause Drupal to complicate about duplicate entries.
-  if (drush_drupal_major_version() <= 7 && function_exists('variable_set')) {
+  // Backdrop: its variable_set() is loaded here without its database layer.
+  if (drush_drupal_major_version() <= 7 && !_provision_civicrm_is_backdrop() && function_exists('variable_set')) {
     variable_set('civicrm_class_loader', NULL);
   }
 
@@ -94,7 +95,7 @@ function drush_provision_civicrm_post_provision_verify($url = NULL) {
     // lead to odd errors such as: 'The dispatch policy prohibits event "hook_civicrm_permission"'
     if (!_provision_civicrm_check_upgrade_mode()) {
       // Precaution to avoid "duplicate entry" that sometimes happens
-      if (drush_drupal_major_version() <= 7 && function_exists('variable_set')) {
+      if (drush_drupal_major_version() <= 7 && !_provision_civicrm_is_backdrop() && function_exists('variable_set')) {
         drush_log(dt("CiviCRM: deleting the civicrm_class_loader variable"), 'ok');
         variable_set('civicrm_class_loader', NULL);
       }

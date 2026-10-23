@@ -53,7 +53,13 @@ function hosting_civicrm_cron_queue($count) {
     // only run the cron on CiviCRM >= 4.1. Normally civicrm.drush.inc will test for 4.1
     // and quietly exit otherwise (so we do not need to check here).
     drush_log(dt("Running CiviCRM cron on !site", array('!site' => $site_name)), 'ok');
-    $result = provision_backend_invoke($site_name, "civicrm-api", array('--user=1', 'Job.execute', 'auth=0'));
+    if (module_exists('hosting_backdrop') && hosting_backdrop_platform_is_backdrop($site->platform)) {
+      // CiviCRM for Backdrop ships no Drush commands: the jobs run through cv.
+      $result = provision_backend_invoke($site_name, 'provision-civicrm-cron');
+    }
+    else {
+      $result = provision_backend_invoke($site_name, "civicrm-api", array('--user=1', 'Job.execute', 'auth=0'));
+    }
 
     if (! empty($result['error_status'])) {
       drush_log(dt('ERROR: !error', array('!error' => $result['output'])), 'error');

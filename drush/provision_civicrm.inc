@@ -120,6 +120,44 @@ function _provision_civicrm_drush_options($op = 'unknown') {
 }
 
 /**
+ * Whether the platform of the current context is Backdrop.
+ *
+ * Backdrop reports Drupal major version 1 to Drush, so every Drupal version
+ * test below takes its Drupal 6/7 branch. Those branches load CiviCRM's Drupal
+ * Drush file and write Drupal variables in this process, and neither exists for
+ * Backdrop: its CiviCRM ships no Drush file, and the Backdrop layer never loads
+ * the site's database layer here. Backdrop sites go through cv instead.
+ */
+function _provision_civicrm_is_backdrop() {
+  $root = d()->root;
+  if (!is_string($root) || $root === '') {
+    return FALSE;
+  }
+  if (function_exists('provision_platform_is_backdrop')) {
+    return provision_platform_is_backdrop($root);
+  }
+  return file_exists($root . '/core/includes/bootstrap.inc')
+    && file_exists($root . '/core/misc/backdrop.js')
+    && !file_exists($root . '/autoload.php');
+}
+
+/**
+ * The cv option that names the site to boot, for Backdrop sites.
+ *
+ * Without it cv boots the site named by the CIVICRM_UF_BASEURL of the
+ * civicrm.settings.php it finds, and a cloned copy of that file still names
+ * the source site until it is regenerated. Empty for other sites, which keep
+ * the behaviour they have always had.
+ */
+function _provision_civicrm_cv_site_option() {
+  if (!_provision_civicrm_is_backdrop()) {
+    return '';
+  }
+  $protocol = (d()->ssl_enabled || d()->https_enabled) ? 'https' : 'http';
+  return ' --url=' . escapeshellarg($protocol . '://' . d()->uri . '/');
+}
+
+/**
  * Check we are in an Aegir site context, and that CiviCRM is available in the platform.
  *
  * @param Boolean $load_if_missing Recommended in most cases. See do#2364871.
@@ -170,7 +208,8 @@ function _provision_civicrm_get_package_path($load_if_missing = FALSE) {
 
     // do#2364871 Workaround a BOA 2.3 issue
     // When civicrm is in an install profile, the civicrm drush module does not get loaded.
-    if ($load_if_missing && ! function_exists('_civicrm_get_crmpath')) {
+    // CiviCRM for Backdrop ships no Drush file; Backdrop sites run through cv only.
+    if ($load_if_missing && ! function_exists('_civicrm_get_crmpath') && ! _provision_civicrm_is_backdrop()) {
       drush_log(dt('CiviCRM: loading file: civicrm.drush.inc.'));
       require_once($crmpath . '/drupal/drush/civicrm.drush.inc');
     }
@@ -388,7 +427,7 @@ function _provision_civicrm_database_version() {
     return $dbVer;
   }
 
-  $command = 'cd ' . escapeshellarg(d()->site_path) . ' && echo "select version from civicrm_domain limit 1" | cv sql | tail -1';
+  $command = 'cd ' . escapeshellarg(d()->site_path) . ' && echo "select version from civicrm_domain limit 1" | cv sql' . _provision_civicrm_cv_site_option() . ' | tail -1';
   drush_log(dt("CiviCRM: running: %command", ['%command' => $command]), 'ok');
   $dbVer = system($command, $retval);
 
@@ -441,10 +480,12 @@ function _provision_civicrm_run_drush_command($command) {
  *
  * Errors are logged as warnings to avoid an Aegir rollback (because those errors
  * should not happen, and if they do, we want to be able to debug).
+ *
+ * $retval receives cv's exit status, for callers that must report a failure.
  */
-function _provision_civicrm_run_cv_command($command) {
+function _provision_civicrm_run_cv_command($command, &$retval = NULL) {
   // Always non-interactive (cv -n)
-  $command = 'cd ' . escapeshellarg(d()->site_path) . ' && cv -n ' . $command;
+  $command = 'cd ' . escapeshellarg(d()->site_path) . ' && cv -n' . _provision_civicrm_cv_site_option() . ' ' . $command;
   drush_log(dt("CiviCRM: running: %command", ['%command' => $command]), 'ok');
   $json = system($command, $retval);
   // Output is always json

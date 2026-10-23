@@ -84,5 +84,9 @@ function provision_civicrm_drush_command() {
     'description' => 'Delete CiviCRM.',
     'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
   );
+  $items['provision-civicrm-cron'] = array(
+    'description' => 'Run the CiviCRM scheduled jobs of a site through cv.',
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
+  );
   return $items;
 }
