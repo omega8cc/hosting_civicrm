@@ -142,19 +142,32 @@ function _provision_civicrm_is_backdrop() {
 }
 
 /**
- * The cv option that names the site to boot, for Backdrop sites.
+ * The cv option that names the site to boot.
  *
  * Without it cv boots the site named by the CIVICRM_UF_BASEURL of the
  * civicrm.settings.php it finds, and a cloned copy of that file still names
- * the source site until it is regenerated. Empty for other sites, which keep
- * the behaviour they have always had.
+ * the source site until it is regenerated: the regeneration then booted the
+ * source, and the clone kept the source's URL and private path.
  */
 function _provision_civicrm_cv_site_option() {
-  if (!_provision_civicrm_is_backdrop()) {
+  if (empty(d()->uri)) {
     return '';
   }
   $protocol = (d()->ssl_enabled || d()->https_enabled) ? 'https' : 'http';
   return ' --url=' . escapeshellarg($protocol . '://' . d()->uri . '/');
+}
+
+/**
+ * The shell prefix every cv call runs with: the site folder as the working
+ * directory, and a umask that lets the web pool write what cv creates.
+ *
+ * cv runs as the backend user and makes folders under the site's files (its
+ * compiled templates among them); with the backend's 022 umask the web pool
+ * could not write them and the site failed until the next permissions fix.
+ * 002 gives them the group-writable modes Provision gives the files folders.
+ */
+function _provision_civicrm_cv_prefix() {
+  return 'cd ' . escapeshellarg(d()->site_path) . ' && umask 002 && ';
 }
 
 /**
@@ -469,7 +482,7 @@ function _provision_civicrm_database_version() {
     return $dbVer;
   }
 
-  $command = 'cd ' . escapeshellarg(d()->site_path) . ' && echo "select version from civicrm_domain limit 1" | cv sql' . _provision_civicrm_cv_site_option() . ' | tail -1';
+  $command = _provision_civicrm_cv_prefix() . 'echo "select version from civicrm_domain limit 1" | cv sql' . _provision_civicrm_cv_site_option() . ' | tail -1';
   drush_log(dt("CiviCRM: running: %command", ['%command' => $command]), 'ok');
   $dbVer = system($command, $retval);
 
@@ -527,7 +540,7 @@ function _provision_civicrm_run_drush_command($command) {
  */
 function _provision_civicrm_run_cv_command($command, &$retval = NULL) {
   // Always non-interactive (cv -n)
-  $command = 'cd ' . escapeshellarg(d()->site_path) . ' && cv -n' . _provision_civicrm_cv_site_option() . ' ' . $command;
+  $command = _provision_civicrm_cv_prefix() . 'cv -n' . _provision_civicrm_cv_site_option() . ' ' . $command;
   drush_log(dt("CiviCRM: running: %command", ['%command' => $command]), 'ok');
   $json = system($command, $retval);
   // Output is always json
