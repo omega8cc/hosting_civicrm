@@ -34,10 +34,19 @@ function drush_provision_civicrm_provision_deploy() {
 
   // This needs to be done before we initialize CiviCRM,
   // otherwise we will load with an old include path (civicrm_root).
-  // By passing a new baseUrl, it will generate a new site-key and secrets
-  $protocol = (d()->ssl_enabled || d()->https_enabled) ? 'https' : 'http';
-  $baseUrl = $protocol . '://' . d()->uri;
-  _provision_civicrm_regenerate_settings($baseUrl);
+  // By passing a new baseUrl, it will generate a new site-key and secrets:
+  // only for a site under a new name (a Clone, a renaming Migrate). The same
+  // site restored or moved keeps its keys, or the credentials CiviCRM stored
+  // encrypted with them could no longer be read, nor its signed links checked.
+  $old_uri = drush_get_option('old_uri');
+  if ($old_uri && $old_uri != d()->uri) {
+    $protocol = (d()->ssl_enabled || d()->https_enabled) ? 'https' : 'http';
+    $baseUrl = $protocol . '://' . d()->uri;
+    _provision_civicrm_regenerate_settings($baseUrl);
+  }
+  else {
+    _provision_civicrm_regenerate_settings();
+  }
 }
 
 /**

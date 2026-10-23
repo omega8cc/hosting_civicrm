@@ -158,16 +158,22 @@ function _provision_civicrm_cv_site_option() {
 }
 
 /**
- * The shell prefix every cv call runs with: the site folder as the working
+ * The shell prefix a cv call runs with: the site folder as the working
  * directory, and a umask that lets the web pool write what cv creates.
  *
  * cv runs as the backend user and makes folders under the site's files (its
  * compiled templates among them); with the backend's 022 umask the web pool
  * could not write them and the site failed until the next permissions fix.
  * 002 gives them the group-writable modes Provision gives the files folders.
+ * core:install keeps the backend's own umask: it writes civicrm.settings.php,
+ * which holds the credentials, with whatever mode the umask leaves.
  */
-function _provision_civicrm_cv_prefix() {
-  return 'cd ' . escapeshellarg(d()->site_path) . ' && umask 002 && ';
+function _provision_civicrm_cv_prefix($command = '') {
+  $prefix = 'cd ' . escapeshellarg(d()->site_path) . ' && ';
+  if (strpos(ltrim($command), 'core:install') !== 0) {
+    $prefix .= 'umask 002 && ';
+  }
+  return $prefix;
 }
 
 /**
@@ -544,7 +550,7 @@ function _provision_civicrm_run_drush_command($command) {
  */
 function _provision_civicrm_run_cv_command($command, &$retval = NULL) {
   // Always non-interactive (cv -n)
-  $command = _provision_civicrm_cv_prefix() . 'cv -n' . _provision_civicrm_cv_site_option() . ' ' . $command;
+  $command = _provision_civicrm_cv_prefix($command) . 'cv -n' . _provision_civicrm_cv_site_option() . ' ' . $command;
   drush_log(dt("CiviCRM: running: %command", ['%command' => $command]), 'ok');
   $json = system($command, $retval);
   // Output is always json
