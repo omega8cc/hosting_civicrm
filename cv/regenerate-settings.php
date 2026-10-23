@@ -104,13 +104,20 @@ if (file_exists($model->settingsPath)) {
   }
 
   // Define imported values: a key the file lacks (written before CiviCRM had
-  // it) or left as a template placeholder counts as missing, and is generated
-  // below.
+  // it), left as a template placeholder, or read as a bare constant name
+  // counts as missing, and is generated below. The template defines
+  // CIVICRM_CRED_KEYS and its kin as an expression over _CIVICRM_CRED_KEYS,
+  // which the token scan above reads as that name.
   $imported = function ($names) use ($defines) {
     foreach ($names as $name) {
-      if (isset($defines[$name]) && $defines[$name] !== '' && strpos($defines[$name], '%%') !== 0) {
-        return $defines[$name];
+      if (!isset($defines[$name]) || $defines[$name] === '') {
+        continue;
       }
+      $value = $defines[$name];
+      if (strpos($value, '%%') === 0 || preg_match('/^_?CIVICRM_[A-Z_]+$/', $value)) {
+        continue;
+      }
+      return $value;
     }
     return '';
   };
