@@ -70,6 +70,9 @@ function _provision_civicrm_install_civicrm($dbuser, $dbpass, $dbhost, $dbname, 
     $retval = 0;
     _provision_civicrm_run_cv_command($install, $retval);
     drush_log(dt("CiviCRM: core:install retval=%retval", array('%retval' => $retval)), $retval == 0 ? 'ok' : 'error');
+    if ($retval == 0) {
+      _provision_civicrm_backdrop_private_path();
+    }
   }
   elseif (drush_drupal_major_version() >= 10) {
 

@@ -158,6 +158,48 @@ function _provision_civicrm_cv_site_option() {
 }
 
 /**
+ * Keep a new Backdrop site's CiviCRM private files in the site's private folder.
+ *
+ * CiviCRM's Backdrop installer, run from the command line, does not see the
+ * site's private file path and pins CiviCRM's private area (its logs and
+ * compiled templates) to the public files folder; on Drupal it lands in the
+ * private one. Run right after the install, before anything lives there; the
+ * settings regeneration that follows keeps the pin.
+ */
+function _provision_civicrm_backdrop_private_path() {
+  $filename = d()->site_path . '/civicrm.settings.php';
+  $settings = @file_get_contents($filename);
+  if (!$settings) {
+    drush_log(dt('CiviCRM: could not read @file to set its private path.', array('@file' => $filename)), 'warning');
+    return FALSE;
+  }
+  $private = d()->site_path . '/private/files/civicrm';
+  $lines = array(
+    '#^\$civicrm_paths\[\'civicrm\.private\'\]\[\'path\'\] = .*$#m' => '$civicrm_paths[\'civicrm.private\'][\'path\'] = ' . var_export($private, TRUE) . ';',
+    '#^(\s*)define\(\'CIVICRM_TEMPLATE_COMPILEDIR\', .*$#m' => 'define(\'CIVICRM_TEMPLATE_COMPILEDIR\', ' . var_export($private . '/templates_c', TRUE) . ');',
+  );
+  foreach ($lines as $pattern => $line) {
+    $count = 0;
+    $settings = preg_replace_callback($pattern, function ($m) use ($line) {
+      return (isset($m[1]) ? $m[1] : '') . $line;
+    }, $settings, 1, $count);
+    if (!$count) {
+      drush_log(dt('CiviCRM: no line to set in @file: @pattern', array('@file' => $filename, '@pattern' => $pattern)), 'warning');
+      return FALSE;
+    }
+  }
+  provision_file()->chmod($filename, 0640);
+  $written = file_put_contents($filename, $settings);
+  provision_file()->chmod($filename, 0440);
+  if ($written === FALSE) {
+    drush_log(dt('CiviCRM: could not write @file to set its private path.', array('@file' => $filename)), 'warning');
+    return FALSE;
+  }
+  drush_log(dt('CiviCRM: private files kept in @path', array('@path' => $private)), 'ok');
+  return TRUE;
+}
+
+/**
  * Check we are in an Aegir site context, and that CiviCRM is available in the platform.
  *
  * @param Boolean $load_if_missing Recommended in most cases. See do#2364871.
