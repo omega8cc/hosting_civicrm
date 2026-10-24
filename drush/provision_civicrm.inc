@@ -173,7 +173,30 @@ function _provision_civicrm_cv_prefix($command = '') {
   if (strpos(ltrim($command), 'core:install') !== 0) {
     $prefix .= 'umask 002 && ';
   }
-  return $prefix;
+  return $prefix . _provision_civicrm_cv_php_path();
+}
+
+/**
+ * The PATH a cv call runs with, so that cv runs on this task's PHP.
+ *
+ * cv starts through "#!/usr/bin/env php": a bare cv runs on the PATH's php,
+ * the server's default, while the task runs on the PHP chosen for the site's
+ * platform. A codebase whose dependencies need a newer PHP than the server's
+ * default then fails every cv call. The running PHP's folder goes first when
+ * cv can run on it (PHP 7.3 or newer) and the binary is named php; otherwise
+ * cv keeps the PATH's php.
+ */
+function _provision_civicrm_cv_php_path($php = NULL, $version_id = NULL) {
+  if ($php === NULL) {
+    $php = defined('PHP_BINARY') ? PHP_BINARY : '';
+  }
+  if ($version_id === NULL) {
+    $version_id = PHP_VERSION_ID;
+  }
+  if ($php === '' || $version_id < 70300 || basename($php) !== 'php' || !is_executable($php)) {
+    return '';
+  }
+  return 'export PATH=' . escapeshellarg(dirname($php)) . ':"$PATH" && ';
 }
 
 /**

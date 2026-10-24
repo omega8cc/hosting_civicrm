@@ -23,12 +23,14 @@ function drush_provision_civicrm_post_provision_install($url = null) {
 
   // Inherit the language from Drupal
   // see _provision_civicrm_language_uf_to_civicrm() for details.
+  // On Backdrop and Drupal 10+ CiviCRM's own setup picks it (below).
   $lang = '';
 
   $uf_language = d()->language;
   drush_log(dt("CiviCRM: Drupal language: %lang", array('%lang' => $uf_language)));
 
-  if ($uf_language && $uf_language != 'en') {
+  if ($uf_language && $uf_language != 'en' && !_provision_civicrm_is_backdrop()
+    && drush_drupal_major_version() < 10) {
     $lang = _provision_civicrm_language_uf_to_civicrm($uf_language);
     drush_log(dt("CiviCRM: CiviCRM language: %lang", array('%lang' => $lang)));
   }
@@ -62,13 +64,13 @@ function _provision_civicrm_install_civicrm($dbuser, $dbpass, $dbhost, $dbname, 
     // itself (on Drupal also civicrmtheme, then flushes Drupal's caches), so no
     // Drush step follows and a locked site-local Drush stays locked. cv is told
     // the site's URL, so it boots this site and no other on the platform.
+    // No --lang: CiviCRM's setup takes the closest language it has to the
+    // site's own and fetches its translation itself. The mapping below turns
+    // codes such as pt-br or zh-hans into names CiviCRM refuses, and a refused
+    // language would fail the install.
     $install = 'core:install';
     if (!_provision_civicrm_is_backdrop()) {
       $install .= ' --cms-base-url=' . escapeshellarg($baseUrl);
-    }
-    if ($lang) {
-      // CiviCRM's installer fetches the language's translation files itself.
-      $install .= ' --lang=' . escapeshellarg($lang);
     }
     provision_file()->chmod(d()->site_path, 0755);
     $retval = 0;
