@@ -53,8 +53,11 @@ function hosting_civicrm_cron_queue($count) {
     // only run the cron on CiviCRM >= 4.1. Normally civicrm.drush.inc will test for 4.1
     // and quietly exit otherwise (so we do not need to check here).
     drush_log(dt("Running CiviCRM cron on !site", array('!site' => $site_name)), 'ok');
-    if (module_exists('hosting_backdrop') && hosting_backdrop_platform_is_backdrop($site->platform)) {
-      // CiviCRM for Backdrop ships no Drush commands: the jobs run through cv.
+    if ((module_exists('hosting_backdrop') && hosting_backdrop_platform_is_backdrop($site->platform))
+      || (function_exists('_hosting_package_platform_drupal_major') && _hosting_package_platform_drupal_major($site->platform) >= 10)) {
+      // CiviCRM for Backdrop ships no Drush commands, and the Drupal 8+ one
+      // only Drush 8 command files, which BOA does not load from a tenant or
+      // catalogue platform for the backend: the jobs run through cv.
       $result = provision_backend_invoke($site_name, 'provision-civicrm-cron');
     }
     else {

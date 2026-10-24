@@ -5,8 +5,9 @@
  *
  * Runs the site's CiviCRM scheduled jobs through cv, as the default
  * organisation with full rights, as cv's own cron does. The panel's CiviCRM
- * cron queue uses it for sites whose CiviCRM ships no Drush commands
- * (Backdrop); a failure is an error, so the queue reports it.
+ * cron queue uses it for Backdrop sites, whose CiviCRM ships no Drush
+ * commands, and Drupal 10+ sites, whose Drush 8 command files BOA does not
+ * load for the backend; a failure is an error, so the queue reports it.
  */
 function drush_provision_civicrm_cron() {
   if (!_provision_civicrm_is_site_context() || !file_exists(d()->site_path . '/civicrm.settings.php')) {

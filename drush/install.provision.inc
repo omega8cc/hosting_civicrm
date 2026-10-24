@@ -33,7 +33,9 @@ function drush_provision_civicrm_post_provision_install($url = null) {
     drush_log(dt("CiviCRM: CiviCRM language: %lang", array('%lang' => $lang)));
   }
 
-  _provision_civicrm_install_civicrm($db_user, $db_passwd, $db_host, $db_name, $lang);
+  if (_provision_civicrm_install_civicrm($db_user, $db_passwd, $db_host, $db_name, $lang) === FALSE) {
+    return FALSE;
+  }
   drush_log(dt("CiviCRM: Installation complete!"), 'ok');
 }
 
@@ -46,82 +48,39 @@ function _provision_civicrm_install_civicrm($dbuser, $dbpass, $dbhost, $dbname, 
   // As of D8, the database schema and civicrm.settings.php
   // are generated when the module is first installed.
 
-  // Install CiviCRM using cv and then enable the module
-  // @todo FIXME On Drupal10, test if we can use cv core:install as well (so that we can support the $lang)
   drush_log(dt('CiviCRM: Detected Drupal core version: %version', ['%version' => drush_drupal_major_version()]), 'ok');
   $protocol = (d()->ssl_enabled || d()->https_enabled) ? 'https' : 'http';
   $baseUrl = $protocol . '://' . d()->uri . '/';
   // SECURITY: d()->uri derives from the site alias and is not validated
   // against shell-unsafe characters at the Hostmaster UI layer. $baseUrl
-  // is used in $command below which is passed to system() (Drupal < 10
-  // branch). Escape it; $lang is already escaped.
-  // See DECISIONS.md Decision 002.
+  // and $lang reach the shell in the commands below: both are escaped.
   $command = 'cv core:install --cms-base-url=' . escapeshellarg($baseUrl) . ' --lang=' . escapeshellarg($lang) . ' && drush pm-enable civicrm -y';
 
-  if (_provision_civicrm_is_backdrop()) {
-    // CiviCRM's Backdrop installer writes civicrm.settings.php into the site
-    // folder and enables the module itself: no Drush step follows. cv is given
-    // the site's URL, which core:install also takes as the CMS base URL.
+  if (_provision_civicrm_is_backdrop() || drush_drupal_major_version() >= 10) {
+    // CiviCRM's own installer through cv, the route CiviCRM documents: it
+    // writes civicrm.settings.php into the site folder and enables the module
+    // itself (on Drupal also civicrmtheme, then flushes Drupal's caches), so no
+    // Drush step follows and a locked site-local Drush stays locked. cv is told
+    // the site's URL, so it boots this site and no other on the platform.
     $install = 'core:install';
+    if (!_provision_civicrm_is_backdrop()) {
+      $install .= ' --cms-base-url=' . escapeshellarg($baseUrl);
+    }
     if ($lang) {
+      // CiviCRM's installer fetches the language's translation files itself.
       $install .= ' --lang=' . escapeshellarg($lang);
     }
     provision_file()->chmod(d()->site_path, 0755);
     $retval = 0;
     _provision_civicrm_run_cv_command($install, $retval);
     drush_log(dt("CiviCRM: core:install retval=%retval", array('%retval' => $retval)), $retval == 0 ? 'ok' : 'error');
-    if ($retval == 0) {
+    if ($retval != 0) {
+      // A site on a CiviCRM platform without CiviCRM is not the site that was
+      // asked for: the install fails and is rolled back.
+      return drush_set_error('PROVISION_CIVICRM_INSTALL_FAILED', dt('CiviCRM could not be installed (cv core:install exit status @status).', array('@status' => $retval)));
+    }
+    if (_provision_civicrm_is_backdrop()) {
       _provision_civicrm_backdrop_private_path();
-    }
-  }
-  elseif (drush_drupal_major_version() >= 10) {
-
-    // Find The App Root Directory
-    $appRoot = findDruAppRoot(d()->root);
-
-    // Define Local Drush Path
-    $drushPath = 'vendor/drush/drush/drush.php';
-
-    // Unlock Site-Local Drush
-    provision_check_codebase_status();
-    if (d()->isConsolePatched || d()->isCorePatched) {
-      drush_log(dt('CRM/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
-      provision_unlock_drush_local_vnd();
-    }
-
-    // Check If The Local Drush Exists And Is Executable
-    $drushAbsolutePath = $appRoot . '/' . $drushPath;
-    drush_log(dt('CRM/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
-
-    if (is_executable($drushAbsolutePath)) {
-      $cmd_string = $drushPath . ' pm:install civicrm -y';
-    }
-    else {
-      $cmd_string = 'drush10 pm:install civicrm -y';
-    }
-
-    // Make site_path writable
-    provision_file()->chmod(d()->site_path, 0755);
-
-    drush_log(dt("CiviCRM: running: %command", ['%command' => $cmd_string]), 'ok');
-
-    $result = drush_shell_cd_and_exec($appRoot, $cmd_string);
-    $output = drush_shell_exec_output();
-    foreach ($output as $index => $line) {
-      if (!$success) { // Log the entire error as a notice.
-        $line_status = 'notice';
-      }
-      else { // Only log the last line as success.
-        $line_status = $index+1 == count($output) ? 'success' : 'notice';
-      }
-      drush_log($line, $line_status);
-    }
-
-    // Lock Site-Local Drush if Unlocked
-    provision_check_codebase_status();
-    if (!d()->isConsolePatched || !d()->isCorePatched) {
-      drush_log(dt('CRM/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-      provision_lock_drush_local_vnd();
     }
   }
   else {

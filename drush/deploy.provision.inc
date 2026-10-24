@@ -52,10 +52,12 @@ function drush_provision_civicrm_post_provision_deploy() {
     return;
   }
 
-  if (_provision_civicrm_is_backdrop()) {
-    // The Backdrop layer never fully bootstraps a site in this process: the
-    // URL rewrite runs inside cv, which boots the deployed site, and Backdrop
-    // has no class loader variable to drop.
+  if (_provision_civicrm_is_backdrop() || drush_drupal_major_version() >= 10) {
+    // The Backdrop layer never fully bootstraps a site in this process, and a
+    // Drupal 10+ site must not be booted here before Provision's own deploy
+    // steps (its database updates and container rebuild run after this hook):
+    // the URL rewrite runs inside cv, which boots the deployed site. Neither
+    // has a class loader variable to drop.
     $old_url = drush_get_option('old_uri');
     $new_url = drush_get_option('uri');
     if ($old_url && $new_url && $old_url != $new_url) {
