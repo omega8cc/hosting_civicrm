@@ -1,6 +1,13 @@
 <?php
 
 /**
+ * Implements drush_hook_COMMAND_validate().
+ */
+function drush_provision_civicrm_provision_migrate_validate($platform = NULL, $new_name = NULL) {
+  return _provision_civicrm_target_release_check('migrate', $platform);
+}
+
+/**
  * Implementation of hook_post_provision_migrate
  */
 function drush_provision_civicrm_post_provision_migrate($platform, $new_name = NULL) {

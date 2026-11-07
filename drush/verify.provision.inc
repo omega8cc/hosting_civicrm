@@ -85,11 +85,19 @@ function drush_provision_civicrm_post_provision_verify($url = NULL) {
     return;
   }
 
+  // A database newer than the code (a copy onto an older CiviCRM): CiviCRM's
+  // upgrade only goes forward, so say it, on every Verify until it is fixed.
+  _provision_civicrm_warn_older_code();
+
   // verify might return fail if, for example, this is a very old version of CiviCRM
   // in which case, no point continuing with the upgrade and cache clear.
   if (provision_civicrm_verify_common()) {
     // Run the CiviCRM database upgrade procedure
-    _provision_civicrm_run_cv_command('upgrade:db');
+    $upgrade_rc = 0;
+    $upgrade = _provision_civicrm_run_cv_command('upgrade:db', $upgrade_rc);
+    if ($upgrade_rc || (is_array($upgrade) && !empty($upgrade['is_error']))) {
+      _provision_civicrm_warn_failed_upgrade();
+    }
 
     // Only flush the cache if we are not upgrading. The upgrader already does a flush, and could
     // lead to odd errors such as: 'The dispatch policy prohibits event "hook_civicrm_permission"'

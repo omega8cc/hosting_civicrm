@@ -512,13 +512,16 @@ function _provision_civicrm_codebase_version() {
 
 /**
  * Helper function to get the CiviCRM version of the DB
+ *
+ * $reset reads it again, for a caller that must see what an upgrade left.
  */
-function _provision_civicrm_database_version() {
+function _provision_civicrm_database_version($reset = FALSE) {
   static $dbVer = 0;
 
-  if ($dbVer) {
+  if ($dbVer && !$reset) {
     return $dbVer;
   }
+  $dbVer = 0;
 
   $command = _provision_civicrm_cv_prefix() . 'echo "select version from civicrm_domain limit 1" | cv sql' . _provision_civicrm_cv_site_option() . ' | tail -1';
   drush_log(dt("CiviCRM: running: %command", ['%command' => $command]), 'ok');
@@ -526,11 +529,141 @@ function _provision_civicrm_database_version() {
 
   if ($retval) {
     drush_log(dt("CiviCRM: command failed {$retval} (the ConfigAndLog should have more details): %output", ['%output' => $dbVer]), 'warning');
+    // A failed read is not a release: the next call reads again.
+    $dbVer = 0;
     return NULL;
   }
 
   drush_log(dt('CiviCRM: db version is !ver', ['!ver' => $dbVer]), 'ok');
   return $dbVer;
+}
+
+/**
+ * Warn when the site's CiviCRM code is older than its database.
+ *
+ * The state a copy onto an older CiviCRM leaves (before the copying tasks
+ * checked the target, or when the check could not read a release): CiviCRM's
+ * upgrade runs only forward, so the site's code does not know its schema.
+ * Returns TRUE when it warned.
+ */
+function _provision_civicrm_warn_older_code() {
+  $code = trim((string) _provision_civicrm_codebase_version());
+  $db = trim((string) _provision_civicrm_database_version());
+  if (!preg_match('/^\d+\.\d+/', $code) || !preg_match('/^\d+\.\d+/', $db)) {
+    return FALSE;
+  }
+  if (version_compare($code, $db, '<')) {
+    drush_log(dt('CiviCRM: this site runs CiviCRM @code on a database of CiviCRM @db. CiviCRM upgrades a database forward only and does not support older code: move the site to a platform with CiviCRM @db or newer.', array('@code' => $code, '@db' => $db)), 'warning');
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Say plainly that CiviCRM's database upgrade failed, and what it left.
+ *
+ * The task keeps its warning status: the Verify that runs the upgrade follows
+ * a Migrate or Clone whose copy already is the site, so failing the task would
+ * change nothing but its label. The line names the code release and the
+ * release the database reads now. A step that threw leaves the database marked
+ * (such as "6.20.alpha1.upgrade"), and cv then refuses to start again without
+ * --retry or --skip, so a Verify cannot resume it: the line says so and names
+ * the way that can. A failure before any step began leaves the old release,
+ * and the next Verify tries the upgrade again.
+ */
+function _provision_civicrm_warn_failed_upgrade() {
+  $code = trim((string) _provision_civicrm_codebase_version());
+  $code = $code !== '' ? $code : 'unknown';
+  $db = trim((string) _provision_civicrm_database_version(TRUE));
+  if (!preg_match('/^\d+\.\d+/', $db)) {
+    // cv could not read the database either: the upgrade may never have run.
+    drush_log(dt('CiviCRM: the database upgrade did not run: cv could not read the site\'s CiviCRM database (code CiviCRM @code). The cv commands above show what was run; once cv can boot the site, run Verify again.', array('@code' => $code)), 'warning');
+    return;
+  }
+  if (stripos($db, 'upgrade') !== FALSE) {
+    drush_log(dt('CiviCRM: the database upgrade stopped inside a step and left the database marked @db; the site runs CiviCRM @code and CiviCRM may not work until the step completes. A Verify cannot resume it: CiviCRM\'s log (its ConfigAndLog folder) names the cause. Once that is fixed, a root operator resumes the step with cv upgrade:db --retry for the site (or skips it with --skip), or the site goes back to its backup from before the upgrade.', array('@code' => $code, '@db' => $db)), 'warning');
+    return;
+  }
+  drush_log(dt('CiviCRM: the database upgrade failed. The site runs CiviCRM @code and its database reads @db, so CiviCRM may not work until the upgrade completes. CiviCRM\'s log (its ConfigAndLog folder) names the cause: fix it, then run Verify again to retry the upgrade.', array('@code' => $code, '@db' => $db)), 'warning');
+}
+
+/**
+ * The CiviCRM release a platform's code carries, or NULL when none is found.
+ *
+ * Read from the code's xml/version.xml without loading the platform: the
+ * vendor copy of a Drupal 8+ platform (registered at its docroot or at its
+ * project folder), else the module folders a Backdrop or Drupal 7 platform
+ * keeps CiviCRM in. The profiles are listed with scandir(), not glob(): a
+ * platform root may hold glob characters.
+ */
+function _provision_civicrm_platform_release($root) {
+  if (!is_string($root) || $root === '' || !is_dir($root)) {
+    return NULL;
+  }
+  $root = rtrim($root, '/');
+  $files = array();
+  $appRoot = findDruAppRoot($root);
+  if ($appRoot) {
+    $files[] = $appRoot . '/vendor/civicrm/civicrm-core/xml/version.xml';
+  }
+  foreach (array('modules/civicrm', 'modules/contrib/civicrm', 'sites/all/modules/civicrm', 'sites/all/modules/contrib/civicrm') as $rel) {
+    $files[] = $root . '/' . $rel . '/xml/version.xml';
+  }
+  if (is_dir($root . '/profiles')) {
+    foreach (scandir($root . '/profiles') as $profile) {
+      if ($profile !== '.' && $profile !== '..') {
+        $files[] = $root . '/profiles/' . $profile . '/modules/civicrm/xml/version.xml';
+      }
+    }
+  }
+  foreach ($files as $file) {
+    if (!is_file($file)) {
+      continue;
+    }
+    $xml = file_get_contents($file);
+    if (is_string($xml) && preg_match('#<version_no>\s*([^<\s]+)\s*</version_no>#', $xml, $match)) {
+      return $match[1];
+    }
+  }
+  return NULL;
+}
+
+/**
+ * Refuse to copy a CiviCRM site onto a platform with an older CiviCRM.
+ *
+ * CiviCRM upgrades a database forward only: on code older than its schema the
+ * Verify that follows the copy runs the extension upgrade alone, and the site
+ * is left on a database its code does not know. The check runs before the
+ * task's safety copy, so a refused Migrate or Clone changes nothing. When the
+ * site's database release or the target's CiviCRM cannot be read, the task
+ * goes on with a warning.
+ *
+ * Returns TRUE to go on, FALSE after setting the error.
+ */
+function _provision_civicrm_target_release_check($task, $platform) {
+  if (!is_string($platform) || $platform === '' || !_provision_civicrm_is_site_context()) {
+    return TRUE;
+  }
+  if (!is_file(d()->site_path . '/civicrm.settings.php')) {
+    return TRUE;
+  }
+  $target = d($platform);
+  $root = isset($target->root) ? $target->root : '';
+  $site_release = trim((string) _provision_civicrm_database_version());
+  if ($site_release === '' || !preg_match('/^\d+\.\d+/', $site_release)) {
+    drush_log(dt('CiviCRM: the site\'s database release could not be read; the @task goes on without checking the target\'s CiviCRM release.', array('@task' => $task)), 'warning');
+    return TRUE;
+  }
+  $target_release = _provision_civicrm_platform_release($root);
+  if ($target_release === NULL) {
+    drush_log(dt('CiviCRM: no CiviCRM release found in the target platform at @root; the @task goes on without checking it.', array('@root' => $root, '@task' => $task)), 'warning');
+    return TRUE;
+  }
+  if (version_compare($target_release, $site_release, '<')) {
+    return drush_set_error('PROVISION_CIVICRM_TARGET_OLDER', dt('CiviCRM: the target platform carries CiviCRM @target, older than this site\'s database (@site). CiviCRM cannot take a database back to older code: choose a platform with CiviCRM @site or newer.', array('@target' => $target_release, '@site' => $site_release)));
+  }
+  drush_log(dt('CiviCRM: the target platform carries CiviCRM @target, the site\'s database @site.', array('@target' => $target_release, '@site' => $site_release)), 'ok');
+  return TRUE;
 }
 
 /**

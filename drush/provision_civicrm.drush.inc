@@ -7,6 +7,7 @@
  */
 
 require_once('provision_civicrm.inc');
+require_once(dirname(__FILE__) . '/clone.provision.inc');
 require_once(dirname(__FILE__) . '/deploy.provision.inc');
 require_once(dirname(__FILE__) . '/install.provision.inc');
 require_once(dirname(__FILE__) . '/migrate.provision.inc');
